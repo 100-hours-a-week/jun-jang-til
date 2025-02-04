@@ -1,0 +1,239 @@
+# TIL Template
+
+## 날짜: 2025-02-04
+
+### 새로 배운 내용
+#### 주제 1: 주제에 대한 설명
+|  | 정의 | 비고 |
+| --- | --- | --- |
+| 프로세스 | 컴퓨터에서 연속적으로 실행 되고 있는 컴퓨터 프로그램 | 필요한 메모리 공간(코드, 데이터, 스택)을 가지고 **독립적**으로 실행됨 |
+| 스레드 | 어떠한 프로그램 내에서, 특히 프로세스 내에서 실행되는 흐름의 단위 | 동시에 작업이 되는 기능들이면 여러 스레드로 처리 되는것 (여기서 “동시에  실행되는 것처럼 보이는 것(동시성)” 이 아니라 “동시에 실행되는 것(병렬성)” 임 ) |
+| 프로세스와 스레드의 차이 | 1. 메모리 관련
+ - 프로세스 : 독립적
+ - 쓰레드 : 프로세스 내에서 메모리 공유, Stack만 개별로
+2. 통신
+ - 프로세스 : IPC 필요
+ - 쓰레드 : 프로세스 내부에서 자유롭게 공유 가능 | 프로세스 2개를 쓰는 게 쓰레드 2개 쓰는것보다 낫다?
+⇒ 왼손, 오른손 으로 할 수 있는 일을, 사람 2 명이서 하는건 너무 불필요할 수 도 있다. |
+| 스레드 오버헤드 | 스레드를 생성, 관리, 컨텍스트 스위칭, 동기화 등의 과정에서 부가적인 비용이 발생할 수 있음 |  |
+| 자바에서 Thread Class를 상속 받는 것과 Runnable Interface를 사용하는것의 차이 | Thread 객체를 상속받는 경우, 다른 클래스를 상속받을 수없고, Thread 마다 새로운 실행단위로생성됨. 
+하지만 Runnable Interface는 인터페이스로 구현하여 Thread 객체에 전달하기 때문에, 다른 클래스를 상속받을 수 있고, 여러 스레드에 공유가 가능함. |  |
+| Synchronized | **한번에 하나의 쓰레드만 접근할 수 있게 하는 키워드** | 모니터 락이라는 자바에 내정된 락을 이용함. 
+락이 해제 될때까지는 접근이 안됨. |
+| AtomicInteger | 원자적으로 정수 연산을 실행 할 수있는 클래스. 
+CAP(Compare And Swap) 알고리즘을 제공 | CAP: 현재값과 일치하면 새로운 값으로 업데이트, 아니라면 업데이트 실패 , 컨텍스트 스위칭이 일어나지 않음 |
+| 자바 언어에서 지원하는 동시성 관리 | 1. synchronized 키워드를 통해 Lock을 걸어 관리한다.
+2. Optimistic Lock( 낙관적락) 을 이용해 동시성 문제가 발생하면, 그때 롤백을 진행한다.
+3. volatille 키워드를 이용해, 캐싱된 값이 아닌 메인 메모리 영역에서 값을 참조해서, 항상 최신의 값을 가지도록 한다. |  |
+
+# 실습
+
+---
+
+### 동시성 문제
+
+---
+
+```
+public class Main {
+    public static void main(String [] args) throws InterruptedException {
+
+        Counter counter=new Counter(0);
+
+        IncrementThread iT1=new IncrementThread(counter);
+        IncrementThread iT2=new IncrementThread(counter);
+
+        Thread T1 = new Thread(iT1);
+        Thread T2 = new Thread(iT2);
+
+        T1.start();
+        T2.start();
+
+        T1.join();
+        T2.join();
+        System.out.println(counter.getValue());
+
+    }
+}
+
+//2000..1500 등 다양하게 값이 나온다.
+```
+
+## 해결
+
+---
+
+```
+public synchronized void  increment(){
+        this.value+=1;
+    }
+    
+    synchronized 키워드를 적용한다.
+```
+
+**synchronized 키워드를 적용할 시 한번에 하나의 쓰레드만 접근할 수 있기 때문에 해결이 된다.**
+
+### 다른 해결. AtomicInteger
+
+---
+
+- Atomic Class
+
+```
+package practice1;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class AtomicCounter {
+    private final AtomicInteger counter;
+    AtomicCounter(int value){
+        this.counter=new AtomicInteger(value);
+    }
+
+    public AtomicInteger getValue(){
+        return counter;
+    }
+    public  void  increment(){
+        this.counter.incrementAndGet();
+    }
+
+}
+
+```
+
+- IncrementThread
+
+```
+package practice1;
+
+public class IncrementThread implements Runnable{
+//    private Counter counter;
+    private  AtomicCounter counter;
+//    IncrementThread(Counter counter){
+//        this.counter=counter;
+//    }
+    IncrementThread(AtomicCounter counter){
+        this.counter=counter;
+    }
+
+    @Override
+    public void run() {
+        for(int i=0;i<1000;i++){
+            counter.increment();
+        }
+    }
+
+}
+
+```
+
+- main
+
+```
+package practice1;
+
+public class Main {
+    public static void main(String [] args) throws InterruptedException {
+
+        Counter counter=new Counter(0);
+        AtomicCounter atomicCounter=new AtomicCounter(0);
+
+        IncrementThread iT1=new IncrementThread(atomicCounter);
+        IncrementThread iT2=new IncrementThread(atomicCounter);
+
+        Thread T1 = new Thread(iT1);
+        Thread T2 = new Thread(iT2);
+
+        T1.start();
+        T2.start();
+
+        T1.join();
+        T2.join();
+        System.out.println(atomicCounter.getValue());
+
+    }
+}
+
+```
+
+## 번외 . Interrupt
+
+---
+
+IncrementThread를 다음과 같이 수정한다.
+
+```
+package practice1;
+
+public class IncrementThread implements Runnable{
+//    private Counter counter;
+    private  AtomicCounter counter;
+//    IncrementThread(Counter counter){
+//        this.counter=counter;
+//    }
+    IncrementThread(AtomicCounter counter){
+        this.counter=counter;
+    }
+
+    @Override
+    public void run() {
+
+        try {
+            for (int i = 0; i < 1000; i++) {
+                counter.increment();
+                Thread.sleep(1); // sleep을 추가하여 인터럽트 체크 가능하도록 함
+            }
+        } catch (InterruptedException e) {
+            System.out.println(Thread.currentThread().getName() + " 인터럽트 발생!");
+        }
+
+    }
+
+}
+
+```
+
+그 다음 메인 클래스를 다음과 같이 수정한다.
+
+```
+package practice1;
+
+public class Main {
+    public static void main(String [] args)   {
+
+        Counter counter=new Counter(0);
+        AtomicCounter atomicCounter=new AtomicCounter(0);
+
+        IncrementThread iT1=new IncrementThread(atomicCounter);
+        IncrementThread iT2=new IncrementThread(atomicCounter);
+
+        Thread T1 = new Thread(iT1);
+        Thread T2 = new Thread(iT2);
+
+        T1.start();
+        T2.start();
+
+        try {
+		        //T2에 인터럽트 신호를 줌
+            T2.interrupt();
+            T1.join();
+            T2.join();
+        }catch (InterruptedException e){
+            System.out.println("인터럽트 발생!");
+        }
+
+        System.out.println(atomicCounter.getValue());
+
+    }
+}
+
+```
+
+T2에게 Interrupt 요청이 들어왔을때, ,  IncrementThread 내부의 Thread.sleep(1)이 실행되고 있다면, InterruptException이 감지되고, 예외 처리를 하게 된다.
+
+
+### 오늘의 도전 과제와 해결 방법
+- 도전 과제 1: 2주차 과제 고민
+
+### 오늘의 회고
+- 새로운 것을 알게 되어 즐거웠다.
